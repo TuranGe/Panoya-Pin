@@ -9,7 +9,8 @@
 
 	let nickname = $state(store.nickname || '');
 	let joining = $state(false);
-	let promptType = $state('kim_yapar'); // 'kim_yapar' | 'yalanci'
+	let selectedMode = $state(null); // owner'ın lobide seçtiği mod: 'kim_yapar' | 'yalanci' | 'mixed'
+	let promptType = $state('kim_yapar'); // sadece 'mixed' modda kullanılan besleme sekmesi
 	let promptText = $state('');
 	let promptAnswer = $state('');
 	let fakeAnswerText = $state('');
@@ -34,6 +35,11 @@
 	const me = $derived(game?.players.find((p) => p.id === store.playerId));
 	const isOwner = $derived(store.isOwner);
 	const MIN_PLAYERS_NOTE = 3;
+
+	// Mod 'mixed' değilse besleme formu doğrudan o türe kilitlenir (sekme gösterilmez).
+	const effectiveType = $derived(
+		game?.selectedMode && game.selectedMode !== 'mixed' ? game.selectedMode : promptType
+	);
 
 	// Svelte 5'te template içinde reaktif bir diziyi doğrudan .sort() ile mutasyona
 	// uğratmak yasak (state_unsafe_mutation hatası) — bu yüzden kopyasını burada sıralıyoruz.
@@ -64,7 +70,7 @@
 		e.preventDefault();
 		const text = promptText.trim();
 		if (!text) return;
-		if (promptType === 'yalanci') {
+		if (effectiveType === 'yalanci') {
 			const answer = promptAnswer.trim();
 			if (!answer) return;
 			mySubmissions = [...mySubmissions, { type: 'yalanci', text, answer }];
@@ -166,39 +172,78 @@
 							<li class="chip-empty">Henüz kimse katılmadı</li>
 						{/if}
 					</ul>
+
 					{#if isOwner}
+						<span class="eyebrow mode-label">Oyun modu</span>
+						<div class="mode-options">
+							<button
+								type="button"
+								class="mode-card"
+								class:active={selectedMode === 'kim_yapar'}
+								onclick={() => (selectedMode = 'kim_yapar')}
+							>
+								<span class="mode-emoji">🎯</span>
+								<span class="mode-name">Kim Yapar?</span>
+								<span class="mode-desc">Grupta kim yapardı, oylayın</span>
+							</button>
+							<button
+								type="button"
+								class="mode-card"
+								class:active={selectedMode === 'yalanci'}
+								onclick={() => (selectedMode = 'yalanci')}
+							>
+								<span class="mode-emoji">🎭</span>
+								<span class="mode-name">Yalancı Kim?</span>
+								<span class="mode-desc">Sahte cevaplar arasından gerçeği bul</span>
+							</button>
+							<button
+								type="button"
+								class="mode-card"
+								class:active={selectedMode === 'mixed'}
+								onclick={() => (selectedMode = 'mixed')}
+							>
+								<span class="mode-emoji">🎲</span>
+								<span class="mode-name">Karışık</span>
+								<span class="mode-desc">İkisi de karışık gelsin</span>
+							</button>
+						</div>
+
 						<button
 							class="btn btn-primary big"
-							disabled={game.players.length < MIN_PLAYERS_NOTE}
-							onclick={() => gameStore.startCollecting()}
+							disabled={game.players.length < MIN_PLAYERS_NOTE || !selectedMode}
+							onclick={() => gameStore.startCollecting(selectedMode)}
 						>
 							Beslemeyi Başlat
 						</button>
 						{#if game.players.length < MIN_PLAYERS_NOTE}
 							<p class="hint">En az {MIN_PLAYERS_NOTE} oyuncu gerekiyor ({game.players.length}/{MIN_PLAYERS_NOTE})</p>
+						{:else if !selectedMode}
+							<p class="hint">Devam etmeden önce bir oyun modu seç.</p>
 						{/if}
 					{:else}
-						<p class="hint">Oda kurucusu hazır olduğunda beslemeyi başlatacak.</p>
+						<p class="hint">Oda kurucusu bir oyun modu seçip beslemeyi başlatacak.</p>
 					{/if}
 				</div>
 				<p class="hint center">Arkadaşlarına davet linkini gönder, herkes kendi evinden katılabilir.</p>
 			</section>
 		{:else if game.phase === 'collecting'}
 			<section class="stage centered">
-				<div class="type-toggle" role="tablist">
-					<button
-						type="button"
-						class:active={promptType === 'kim_yapar'}
-						onclick={() => (promptType = 'kim_yapar')}
-					>Kim Yapar?</button>
-					<button
-						type="button"
-						class:active={promptType === 'yalanci'}
-						onclick={() => (promptType = 'yalanci')}
-					>Yalancı Kim?</button>
-				</div>
+				{#if game.selectedMode === 'mixed'}
+					<div class="type-toggle" role="tablist">
+						<button
+							type="button"
+							class:active={promptType === 'kim_yapar'}
+							onclick={() => (promptType = 'kim_yapar')}
+						>Kim Yapar?</button>
+						<button
+							type="button"
+							class:active={promptType === 'yalanci'}
+							onclick={() => (promptType = 'yalanci')}
+						>Yalancı Kim?</button>
+					</div>
+				{/if}
 
-				{#if promptType === 'kim_yapar'}
+				{#if effectiveType === 'kim_yapar'}
 					<form class="stack" onsubmit={handleSubmitPrompt}>
 						<div class="note note--tilt-a big-note">
 							<p class="hand instr">Grubunuza dair bir senaryo yaz — bir anı, bir espri, ya da
@@ -588,6 +633,56 @@
 	.chip-empty {
 		color: var(--ink-soft);
 		font-style: italic;
+	}
+
+	.mode-label {
+		display: block;
+		margin: 1.25rem 0 0.75rem;
+	}
+	.mode-options {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.6rem;
+		margin-bottom: 1.25rem;
+	}
+	@media (min-width: 480px) {
+		.mode-options {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+	.mode-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 0.3rem;
+		background: var(--paper);
+		border: 3px solid var(--ink);
+		border-radius: 16px;
+		padding: 0.85rem 0.75rem;
+		box-shadow: 3px 4px 0 var(--ink);
+	}
+	.mode-card:active {
+		transform: translateY(2px);
+		box-shadow: 1px 2px 0 var(--ink);
+	}
+	.mode-card.active {
+		background: var(--yellow);
+	}
+	.mode-emoji {
+		font-size: 1.5rem;
+	}
+	.mode-name {
+		font-family: var(--font-display);
+		font-weight: 700;
+		font-size: 0.95rem;
+	}
+	.mode-desc {
+		font-size: 0.75rem;
+		color: var(--ink);
+		opacity: 0.75;
+		font-weight: 500;
+		line-height: 1.3;
 	}
 
 	.type-toggle {

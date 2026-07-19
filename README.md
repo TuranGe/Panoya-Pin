@@ -16,13 +16,17 @@ else, they just hold the authority to advance the game (the "★ host" badge).
    4-letter room code and joins the game as the "host".
 2. Everyone else hits **"Join Room"** and enters the code and their own
    nickname — from their own phone or computer, wherever they are.
-3. **Prompt round**: everyone writes content about the group, choosing between
-   two types:
+3. **Mode select**: in the lobby, the host picks the game mode before opening
+   the prompt round:
+   - **Who Would?** — everyone writes scenarios only
+   - **Who's Lying?** — everyone writes trivia questions + real answers only
+   - **Mixed** — players choose per submission which type to write
+4. **Prompt round**: everyone writes content matching the chosen mode:
    - **Who Would?**: a scenario about your group ("who would do this?" style
      question or memory)
    - **Who's Lying?**: a real question + its real answer (e.g. "What was my
      nickname in high school? → Shrimp")
-4. The game mixes both content types round by round:
+5. The game runs through the submitted content round by round:
    - **Who Would?** round: a scenario appears on screen, everyone votes on who
      in the group would most likely do it. Whoever matches the majority vote
      scores points; whoever gets the most votes also earns an "iconic" bonus.
@@ -31,12 +35,14 @@ else, they just hold the authority to advance the game (the "★ host" badge).
      answer is real. Guessing correctly scores points; fooling someone with
      your fake answer scores points too; the person who asked the question
      gets a flat bonus.
-5. After the last round, the scoreboard appears. If the host hits **"Play
-   Again"**, scores reset but the submitted content stays in the pool.
+6. After the last round, the scoreboard appears. If the host hits **"Play
+   Again"**, scores reset but the submitted content stays in the pool (the
+   host picks a mode again for the next game).
 
 If not enough content was submitted (fewer than four), the system
-automatically fills the gap with a few ready-made questions/scenarios (a mix
-of both types), so the game stays playable even on a first try with just 3
+automatically fills the gap with a few ready-made questions/scenarios
+matching the chosen mode, so the game stays playable even on a first try
+with just 3
 people.
 
 Every round has a **25-second timer**; when it runs out, anyone who hasn't
@@ -139,8 +145,20 @@ Test durations can be shortened via the `OWNER_GRACE_MS` and
 
 ## Game modes
 
-Both modes draw from the same prompt pool, and rounds come up in a shuffled,
-mixed order:
+The host picks a mode in the lobby, before the prompt round opens
+(`room.selectedMode`, set via `start_collecting {mode}`):
+
+- **Who Would?** (`kim_yapar`) — only scenario prompts are accepted; every
+  round is a "who would do this" vote.
+- **Who's Lying?** (`yalanci`) — only question+answer prompts are accepted;
+  every round is a Fibbage-style bluffing round.
+- **Mixed** (`mixed`) — players choose per submission, and rounds come up in
+  a shuffled, mixed order.
+
+Submissions that don't match the selected mode are rejected server-side
+(see `addSubmission` in `gameLogic.js`), and the auto-fill fallback content
+(used when fewer than 4 prompts were submitted) also respects the chosen
+mode.
 
 - **Who Would?** — a scenario; everyone votes on who in the group would do
   it. Matching the majority scores +10; getting the most votes earns a +5
@@ -153,9 +171,11 @@ mixed order:
 
 To add a new mode:
 
-- `src/lib/server/gameLogic.js` — a mode's round/voting/scoring logic
+- `src/lib/server/gameLogic.js` — a mode's round/voting/scoring logic,
+  and add its identifier to `VALID_MODES`
 - `src/lib/server/wsServer.js` — the message types that drive that logic
-- `src/routes/play/[code]/+page.svelte` — the UI for that phase
+- `src/routes/play/[code]/+page.svelte` — the UI for that phase (mode card
+  in the lobby, prompt form in the collecting phase, round UI in-game)
 
 One idea for what's next: **"Whose Line Is It?"** — real quotes/moments are
 shown, and players guess who they belong to.

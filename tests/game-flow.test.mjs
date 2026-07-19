@@ -54,11 +54,11 @@ async function main() {
 	console.log('--- 3 oyuncu odada, owner:', owner.latest.state.players.find((p) => p.id === ownerId)?.nickname, '---');
 
 	// Owner olmayan biri faz geçişini tetiklemeye çalışırsa engellenmeli
-	send(players[1], { type: 'start_collecting' });
+	send(players[1], { type: 'start_collecting', mode: 'kim_yapar' });
 	await new Promise((r) => setTimeout(r, 200));
 	console.log('✅ Owner olmayanın start_collecting denemesi sessizce yok sayıldı (faz hâlâ lobby):', owner.latest.state.phase === 'lobby');
 
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'kim_yapar' });
 	await wOwner((m) => m.state?.phase === 'collecting');
 	console.log('--- besleme fazı ---');
 

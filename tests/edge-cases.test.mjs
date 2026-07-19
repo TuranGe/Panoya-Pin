@@ -64,7 +64,7 @@ async function main() {
 	const onlyOne = await connect();
 	send(onlyOne, { type: 'join_room', code: room2.code, nickname: 'Yalnız' });
 	await sleep(200);
-	send(owner2, { type: 'start_collecting' });
+	send(owner2, { type: 'start_collecting', mode: 'kim_yapar' });
 	const err2 = await wOwner2((m) => m.type === 'error');
 	console.log('✅ Yetersiz oyuncu hatası doğru döndü:', err2.message);
 
@@ -96,9 +96,30 @@ async function main() {
 	await w1b((m) => m.state?.ownerId && m.state.ownerId !== created.playerId, graceMs + 3000);
 	console.log('✅ Grace period sonunda owner kalıcı ayrılınca sahiplik başka oyuncuya devroldu');
 
+	// --- Mod seçmeden beslemeyi başlatmaya çalışmak reddedilmeli ---
+	const owner3 = await connect();
+	const wOwner3 = waiterFor(owner3);
+	send(owner3, { type: 'create_room', nickname: 'ModsuzKurucu' });
+	const room3 = await wOwner3((m) => m.type === 'joined');
+	const extra1 = await connect();
+	const extra2 = await connect();
+	send(extra1, { type: 'join_room', code: room3.code, nickname: 'X' });
+	send(extra2, { type: 'join_room', code: room3.code, nickname: 'Y' });
+	await wOwner3((m) => m.state?.players.length === 3);
+	send(owner3, { type: 'start_collecting' }); // mode YOK
+	const modeErr = await wOwner3((m) => m.type === 'error');
+	console.log('✅ Mod seçmeden beslemeyi başlatma reddedildi:', modeErr.message);
+
 	// --- Oyun başladıktan sonra yeni oyuncu katılamaz ---
-	send(p1b, { type: 'start_collecting' });
-	await w1b((m) => m.state?.phase === 'collecting');
+	send(p1b, { type: 'start_collecting', mode: 'kim_yapar' });
+	await w1b((m) => m.state?.phase === 'collecting' && m.state.selectedMode === 'kim_yapar');
+	console.log('✅ Beslemeye "kim_yapar" modu ile başlandı, state.selectedMode doğru yansıdı');
+
+	// --- Seçilen moda uymayan içerik reddedilmeli ---
+	send(p1b, { type: 'submit_prompt', promptType: 'yalanci', text: 'yanlış tür soru?', answer: 'cevap' });
+	const wrongTypeErr = await w1b((m) => m.type === 'error');
+	console.log('✅ "kim_yapar" modunda yalancı-kim içeriği reddedildi:', wrongTypeErr.message);
+
 	for (const [i, p] of [p1b, p2].entries()) send(p, { type: 'submit_prompt', text: `senaryo ${i}` });
 	await w1b((m) => m.state?.submittedCount === 2);
 	send(p1b, { type: 'start_game' });

@@ -21,7 +21,8 @@ import {
 	getPublicState,
 	MIN_PLAYERS,
 	MIN_POOL_TO_START,
-	ROUND_DURATION_MS
+	ROUND_DURATION_MS,
+	VALID_MODES
 } from './gameLogic.js';
 
 const MAX_NICKNAME = 20;
@@ -178,7 +179,10 @@ function handleMessage(ws, msg) {
 			if (room.players.size < MIN_PLAYERS) {
 				return sendError(ws, `Başlamak için en az ${MIN_PLAYERS} oyuncu gerekiyor.`);
 			}
-			beginCollecting(room);
+			if (!VALID_MODES.includes(msg.mode)) {
+				return sendError(ws, 'Önce bir oyun modu seç.');
+			}
+			beginCollecting(room, msg.mode);
 			broadcastRoom(room);
 			break;
 		}

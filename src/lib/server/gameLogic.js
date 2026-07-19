@@ -3,6 +3,7 @@ import { DEFAULT_KIM_YAPAR_PROMPTS, DEFAULT_YALANCI_PROMPTS } from './seedPrompt
 export const MIN_PLAYERS = 3;
 export const MIN_POOL_TO_START = 4;
 export const ROUND_DURATION_MS = Number(process.env.ROUND_DURATION_MS) || 25000; // her (alt-)faz için süre
+export const VALID_MODES = ['kim_yapar', 'yalanci', 'mixed'];
 
 const POINTS_FOR_MATCH = 10; // Kim Yapar: çoğunlukla aynı kişiyi seçmek
 const POINTS_FOR_BEING_ICONIC = 5; // Kim Yapar: en çok oyu alan kişi olmak
@@ -34,6 +35,10 @@ function eligiblePlayers(room, round) {
 export function addSubmission(room, authorId, payload) {
 	const type = payload?.type === 'yalanci' ? 'yalanci' : 'kim_yapar';
 
+	if (room.selectedMode && room.selectedMode !== 'mixed' && type !== room.selectedMode) {
+		return { ok: false, error: 'Bu oyunda seçilen mod bu içerik türüne izin vermiyor.' };
+	}
+
 	if (type === 'kim_yapar') {
 		const clean = (payload?.text || '').trim().slice(0, 140);
 		if (!clean) return { ok: false, error: 'Boş girdi gönderilemez.' };
@@ -49,14 +54,19 @@ export function addSubmission(room, authorId, payload) {
 	return { ok: true };
 }
 
-export function beginCollecting(room) {
+export function beginCollecting(room, mode) {
+	room.selectedMode = mode;
 	room.phase = 'collecting';
 }
 
-function defaultFillers(need) {
+function defaultFillers(need, mode) {
 	const kimYapar = DEFAULT_KIM_YAPAR_PROMPTS.map((text) => ({ type: 'kim_yapar', text }));
 	const yalanci = DEFAULT_YALANCI_PROMPTS.map((q) => ({ type: 'yalanci', text: q.text, answer: q.answer }));
-	return shuffle([...kimYapar, ...yalanci])
+	let source;
+	if (mode === 'kim_yapar') source = kimYapar;
+	else if (mode === 'yalanci') source = yalanci;
+	else source = [...kimYapar, ...yalanci];
+	return shuffle(source)
 		.slice(0, need)
 		.map((f) => ({
 			id: crypto.randomUUID(),
@@ -70,7 +80,7 @@ function defaultFillers(need) {
 
 export function startGame(room) {
 	if (room.pool.length < MIN_POOL_TO_START) {
-		room.pool.push(...defaultFillers(MIN_POOL_TO_START - room.pool.length));
+		room.pool.push(...defaultFillers(MIN_POOL_TO_START - room.pool.length, room.selectedMode));
 	}
 	room.pool = shuffle(room.pool);
 	room.phase = 'playing';
@@ -244,6 +254,7 @@ function revealYalanciRound(room, round) {
 
 export function resetForReplay(room) {
 	room.phase = 'lobby';
+	room.selectedMode = null;
 	room.roundNumber = 0;
 	room.usedIds = new Set();
 	room.currentRound = null;
@@ -336,6 +347,7 @@ export function getPublicState(room) {
 		code: room.code,
 		phase: room.phase,
 		ownerId: room.ownerId,
+		selectedMode: room.selectedMode,
 		players,
 		poolCount: room.pool.length,
 		submittedCount: room.pool.filter((p) => !p.isDefault).length,

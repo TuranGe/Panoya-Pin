@@ -21,7 +21,7 @@ const PLAYER_COLORS = [
 function generateCode() {
 	let code;
 	do {
-		code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+		code = Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 	} while (rooms.has(code));
 	return code;
 }
@@ -43,6 +43,7 @@ function generateCode() {
  * @property {string|null} ownerId
  * @property {ReturnType<typeof setTimeout>|null} ownerGraceTimer
  * @property {'lobby'|'collecting'|'playing'|'results'} phase
+ * @property {'kim_yapar'|'yalanci'|'mixed'|null} selectedMode
  * @property {Map<string, Player>} players
  * @property {Submission[]} pool
  * @property {Set<string>} usedIds
@@ -59,6 +60,7 @@ export function createRoom() {
 		ownerId: null,
 		ownerGraceTimer: null,
 		phase: 'lobby',
+		selectedMode: null, // 'kim_yapar' | 'yalanci' | 'mixed' — beslemeyi başlatmadan önce owner seçer
 		players: new Map(),
 		pool: [],
 		usedIds: new Set(),
