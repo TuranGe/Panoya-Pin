@@ -1,0 +1,256 @@
+:root {
+	/* --- Renk paleti: canlı, enerjik parti oyunu paleti --- */
+	--ink: #2b1b4d; /* ana metin / kalın çizgiler: koyu erik-lacivert */
+	--ink-soft: #6a5a92; /* açık zeminlerde ikincil metin */
+	--paper: #fffdf6; /* not kağıdı / kart zemini: kırık beyaz */
+	--paper-ink: #2b1b4d;
+	--panel: #fff3d6; /* iç içe panel zemini: soluk sıcak sarı */
+	--line: rgba(43, 27, 77, 0.16);
+
+	--yellow: #ffd23f;
+	--yellow-deep: #e0a800;
+	--pink: #ff3e7a;
+	--pink-deep: #d81a58;
+	--mint: #2fbf78; /* başarı / doğru tahmin (metin okunurluğu için biraz koyultuldu) */
+	--blue: #3e8eff;
+	--purple: #b14eff;
+	--orange: #ff7a3d;
+	--teal: #17b8a6;
+	--red: #ff5c5c;
+
+	--bg-grad: linear-gradient(160deg, #ffd23f 0%, #ff8a3d 45%, #ff3e7a 100%);
+
+	/* --- Tipografi --- */
+	--font-display: 'Fredoka', system-ui, sans-serif;
+	--font-body: 'Inter', system-ui, sans-serif;
+	--font-hand: 'Caveat', cursive;
+
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--bg-grad);
+	background-attachment: fixed;
+	color: var(--ink);
+	font-family: var(--font-body);
+	font-size: 17px;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.display {
+	font-family: var(--font-display);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	margin: 0;
+}
+
+p {
+	margin: 0;
+}
+
+button {
+	font-family: var(--font-display);
+	cursor: pointer;
+}
+
+a {
+	color: inherit;
+}
+
+::selection {
+	background: var(--ink);
+	color: var(--yellow);
+}
+
+:focus-visible {
+	outline: 3px solid var(--blue);
+	outline-offset: 3px;
+	border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* --- İmza öğesi: panoya iğnelenmiş, kalın çizgili not kağıdı --- */
+.note {
+	position: relative;
+	background: var(--paper);
+	color: var(--paper-ink);
+	border: 3px solid var(--ink);
+	border-radius: 6px 20px 6px 20px;
+	box-shadow: 6px 7px 0 var(--ink);
+	padding: 1.25rem 1.5rem;
+	animation: pin-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.note::before {
+	content: '';
+	position: absolute;
+	top: -11px;
+	left: 50%;
+	translate: -50% 0;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--pink);
+	border: 3px solid var(--ink);
+}
+
+.note--tilt-a {
+	transform: rotate(-1.6deg);
+}
+.note--tilt-b {
+	transform: rotate(1.3deg);
+}
+.note--tilt-c {
+	transform: rotate(-0.7deg);
+}
+
+@keyframes pin-in {
+	from {
+		opacity: 0;
+		transform: translateY(-10px) rotate(0deg) scale(0.96);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) rotate(var(--tilt, 0deg)) scale(1);
+	}
+}
+
+/* --- Ortak yerleşim yardımcıları --- */
+.screen {
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 1.5rem 1.25rem 3rem;
+}
+
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+	width: 100%;
+	max-width: 480px;
+}
+
+.btn {
+	appearance: none;
+	border: 3px solid var(--ink);
+	border-radius: 999px;
+	padding: 0.85rem 1.6rem;
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: var(--ink);
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.12s ease,
+		filter 0.12s ease;
+}
+.btn:active {
+	transform: scale(0.97);
+}
+.btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.btn-primary {
+	background: var(--mint);
+	box-shadow: 0 6px 0 #1f8e58;
+}
+.btn-primary:not(:disabled):hover {
+	filter: brightness(1.05);
+}
+.btn-primary:not(:disabled):active {
+	box-shadow: 0 2px 0 #1f8e58;
+	transform: translateY(4px) scale(0.99);
+}
+
+.btn-secondary {
+	background: var(--paper);
+	box-shadow: 0 6px 0 rgba(43, 27, 77, 0.35);
+}
+.btn-secondary:not(:disabled):hover {
+	background: #fff;
+}
+.btn-secondary:not(:disabled):active {
+	box-shadow: 0 2px 0 rgba(43, 27, 77, 0.35);
+	transform: translateY(4px) scale(0.99);
+}
+
+.btn-yellow {
+	background: var(--yellow);
+	box-shadow: 0 6px 0 var(--yellow-deep);
+}
+.btn-yellow:not(:disabled):active {
+	box-shadow: 0 2px 0 var(--yellow-deep);
+	transform: translateY(4px) scale(0.99);
+}
+
+.input {
+	width: 100%;
+	border-radius: 14px;
+	border: 3px solid var(--ink);
+	background: var(--paper);
+	color: var(--ink);
+	padding: 0.85rem 1rem;
+	font-family: var(--font-body);
+	font-size: 1.05rem;
+	font-weight: 600;
+}
+.input:focus {
+	border-color: var(--blue);
+	outline: none;
+}
+.input::placeholder {
+	color: var(--ink-soft);
+	font-weight: 500;
+}
+
+.eyebrow {
+	font-family: var(--font-display);
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink);
+	opacity: 0.7;
+}
+
+.hand {
+	font-family: var(--font-hand);
+}
+
+.pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.75rem;
+	border-radius: 999px;
+	font-size: 0.85rem;
+	font-weight: 700;
+	background: var(--panel);
+	border: 2px solid var(--ink);
+	color: var(--ink);
+}

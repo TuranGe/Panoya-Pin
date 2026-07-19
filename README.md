@@ -1,0 +1,178 @@
+# Panoya Pin
+
+An open-source party game that turns your friend group's own memories, inside
+jokes, and shared knowledge into the game itself. Unlike Skribbl/Pictionary-style
+games, the word list or category isn't fixed — **the players write the
+content themselves**. That means no two groups ever play the same game.
+
+**Everyone plays remotely, from their own device** (think Codenames Online /
+Gartic Phone) — you don't need to be in the same room. There's no "shared
+screen" requirement; the room creator is a normal player just like everyone
+else, they just hold the authority to advance the game (the "★ host" badge).
+
+## How to play
+
+1. Someone hits **"Create Room"** on the homepage, enters a nickname → gets a
+   4-letter room code and joins the game as the "host".
+2. Everyone else hits **"Join Room"** and enters the code and their own
+   nickname — from their own phone or computer, wherever they are.
+3. **Prompt round**: everyone writes content about the group, choosing between
+   two types:
+   - **Who Would?**: a scenario about your group ("who would do this?" style
+     question or memory)
+   - **Who's Lying?**: a real question + its real answer (e.g. "What was my
+     nickname in high school? → Shrimp")
+4. The game mixes both content types round by round:
+   - **Who Would?** round: a scenario appears on screen, everyone votes on who
+     in the group would most likely do it. Whoever matches the majority vote
+     scores points; whoever gets the most votes also earns an "iconic" bonus.
+   - **Who's Lying?** round: everyone except the person who asked writes a
+     convincing fake answer, then everyone except the asker votes on which
+     answer is real. Guessing correctly scores points; fooling someone with
+     your fake answer scores points too; the person who asked the question
+     gets a flat bonus.
+5. After the last round, the scoreboard appears. If the host hits **"Play
+   Again"**, scores reset but the submitted content stays in the pool.
+
+If not enough content was submitted (fewer than four), the system
+automatically fills the gap with a few ready-made questions/scenarios (a mix
+of both types), so the game stays playable even on a first try with just 3
+people.
+
+Every round has a **25-second timer**; when it runs out, anyone who hasn't
+responded is simply counted as having passed, and the round resolves
+automatically — you don't have to wait for everyone.
+
+If the room host (★) refreshes their page, they don't lose host status (there's
+a ~15-second grace period for brief interruptions). The host can transfer
+their role to another player from the lobby, or kick a player. If the host
+leaves for good (past the grace period), the role automatically passes to
+another connected player — the game never gets stuck waiting on one person.
+
+## Quick start
+
+```bash
+npm install
+npm run dev -- --open
+```
+
+Create a room, send the invite link (there's a copy-link button) to your
+friends — everyone can join from their own internet connection. If you want
+to test from a phone on your local network, use `npm run dev -- --host`.
+
+## Architecture
+
+- **SvelteKit + Svelte 5 (runes)**, plain JavaScript.
+- Real-time sync is handled by a **plain WebSocket server** (the `ws`
+  package); no external service (Pusher, Supabase, etc.) required.
+  - A small plugin in `vite.config.js` attaches the WebSocket server to
+    Vite's own HTTP server during `npm run dev`.
+  - `server.js` attaches the `build/handler.js` produced by `adapter-node` in
+    production (`npm run build && npm start`) to a plain `http.Server` and
+    opens the `/ws` path on the same server.
+- Room state (`src/lib/server/rooms.js`, `gameLogic.js`) lives in an in-memory
+  `Map` — plenty for the scale of a friend group (a handful of people, a
+  handful of rooms). To scale further, swap that `Map` for a shared store
+  like Redis.
+- **Owner model**: the player who creates the room is marked as
+  `room.ownerId`, and only they can trigger phase transitions (start
+  prompting/start game, next round, play again). Short interruptions like a
+  page refresh don't immediately hand off ownership — there's a grace period
+  (`OWNER_GRACE_MS`, 15s by default). The owner can transfer their role with
+  `transfer_ownership`, or kick a player with `kick_player` (see `rooms.js`).
+- **Round timer**: each round auto-resolves after `ROUND_DURATION_MS` (25s by
+  default) even if not everyone has responded; non-responders are counted as
+  having passed (see `wsServer.js` → `scheduleRoundTimer`). Both durations can
+  be shortened via environment variables in a test environment.
+- The client keeps a single shared WebSocket connection
+  (`src/lib/client/socket.svelte.js`, reactive via Svelte 5 runes); even after
+  a page refresh, it automatically resumes where it left off using the room
+  code/player id stored in `localStorage`.
+- Two routes: `/` (landing) and `/play/[code]` (the single screen everyone
+  plays on — extra control buttons appear there if you're the host).
+
+### Why WebSocket + in-memory state instead of serverless?
+
+The game needs long-lived connections and shared, frequently-updated room
+state — that's a better fit for a single, always-on Node process (Railway,
+Fly.io, Render, or your own VPS) than a typical serverless function.
+`server.js` is written exactly for that.
+
+## Design
+
+The interface is deliberately bright and energetic: a warm
+yellow-orange-pink gradient background, thick-bordered "sticky note" cards, a
+`Fredoka` display font, and big, playful buttons (an energy close to the
+Gartic Phone / Kahoot family). All color/typography values are defined as CSS
+custom properties in `src/app.css` — the whole palette can be changed from
+one file.
+
+## Tests
+
+Instead of a real browser, there are integration tests that verify the
+entire room/voting/scoring logic end to end (using the `ws` package to open
+fake clients against a real running server):
+
+```bash
+npm run dev &          # or: npm run build && npm start
+node tests/game-flow.test.mjs
+node tests/edge-cases.test.mjs
+node tests/new-features.test.mjs
+node tests/reconnect-mid-game.test.mjs
+node tests/yalanci-kim.test.mjs
+```
+
+- `edge-cases.test.mjs` — too few players, blocking late joins, ownership
+  surviving a brief disconnect, ownership transfer on a permanent departure.
+- `new-features.test.mjs` — ownership transfer, kicking a player, a round
+  auto-resolving when its timer runs out.
+- `reconnect-mid-game.test.mjs` — a player reconnecting after the game has
+  already started (verifies the server returns a valid state without
+  erroring).
+- `yalanci-kim.test.mjs` — the writing/voting exclusion rules (the asker can
+  neither write nor vote), scoring for correct guesses + fooling + the
+  asker's bonus, and forced progress when time runs out.
+
+Test durations can be shortened via the `OWNER_GRACE_MS` and
+`ROUND_DURATION_MS` environment variables, e.g.
+`OWNER_GRACE_MS=1000 ROUND_DURATION_MS=3000 npm start`.
+
+## Game modes
+
+Both modes draw from the same prompt pool, and rounds come up in a shuffled,
+mixed order:
+
+- **Who Would?** — a scenario; everyone votes on who in the group would do
+  it. Matching the majority scores +10; getting the most votes earns a +5
+  "iconic" bonus.
+- **Who's Lying?** (Fibbage/Balderdash-style) — everyone except the asker
+  writes a convincing fake answer, then everyone except the asker votes on
+  which one is real. Guessing correctly scores +10; each person you fool with
+  your fake answer scores you +5; the asker gets a flat +5. The asker can
+  neither write nor vote (they already know the answer).
+
+To add a new mode:
+
+- `src/lib/server/gameLogic.js` — a mode's round/voting/scoring logic
+- `src/lib/server/wsServer.js` — the message types that drive that logic
+- `src/routes/play/[code]/+page.svelte` — the UI for that phase
+
+One idea for what's next: **"Whose Line Is It?"** — real quotes/moments are
+shown, and players guess who they belong to.
+
+## Roadmap / deliberately out of scope
+
+- **Persistent group library**: prompts only live in memory for the lifetime
+  of a room (cleaned up after 10 minutes of inactivity). If you want the same
+  group to keep adding to the same library week after week, the natural next
+  step is tying the pool to a persistent "group code" instead of the
+  ephemeral room code, and writing it to a lightweight database like
+  SQLite/Drizzle.
+- **Content moderation**: this was designed as a friend-group game (everyone
+  trusts each other). If you're planning a public, multi-tenant version open
+  to strangers, you'll want a moderation/reporting mechanism for submitted
+  text.
+
+## License
+
+MIT — see `LICENSE`.
