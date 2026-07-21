@@ -58,13 +58,13 @@ async function testTransferOwnership() {
 	console.log('✅ Sahiplik devri çalıştı (owner artık B)');
 
 	// Eski owner artık faz geçişi tetikleyemez
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'kim_yapar' });
 	await sleep(200);
 	console.log('✅ Eski owner artık faz geçişi tetikleyemiyor:', owner.latest.state.phase === 'lobby');
 
 	// Yeni owner tetikleyebilir
 	const wP2 = waiterFor(p2);
-	send(p2, { type: 'start_collecting' });
+	send(p2, { type: 'start_collecting', mode: 'kim_yapar' });
 	await wP2((m) => m.state?.phase === 'collecting');
 	console.log('✅ Yeni owner (B) faz geçişini başarıyla tetikledi');
 }
@@ -94,7 +94,7 @@ async function testRoundTimer() {
 	const [owner, p2, p3] = players;
 	const wOwner = waiterFor(owner);
 
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'kim_yapar' });
 	await wOwner((m) => m.state?.phase === 'collecting');
 	for (const [i, p] of players.entries()) send(p, { type: 'submit_prompt', text: `senaryo ${i}` });
 	await wOwner((m) => m.state?.submittedCount === 3);

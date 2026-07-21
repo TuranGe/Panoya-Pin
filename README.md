@@ -35,8 +35,11 @@ else, they just hold the authority to advance the game (the "★ host" badge).
      answer is real. Guessing correctly scores points; fooling someone with
      your fake answer scores points too; the person who asked the question
      gets a flat bonus.
-6. After the last round, the scoreboard appears. If the host hits **"Play
-   Again"**, scores reset but the submitted content stays in the pool (the
+6. After the last round, a **highlights screen** shows a handful of
+   superlative awards ("Best Liar", "Most Gullible", "Detective", "Black
+   Sheep", "Best Round"...) based on what actually happened in the game,
+   followed by the final scoreboard. If the host hits **"Play Again"**,
+   scores and stats reset but the submitted content stays in the pool (the
    host picks a mode again for the next game).
 
 If not enough content was submitted (fewer than four), the system
@@ -113,6 +116,29 @@ Gartic Phone / Kahoot family). All color/typography values are defined as CSS
 custom properties in `src/app.css` — the whole palette can be changed from
 one file.
 
+A few extra touches reinforce that energy:
+
+- **Sound cues** — round start, results reveal, a countdown tick in the last
+  5 seconds, scoring a point, and a small fanfare on game end. These are all
+  synthesized on the fly with the Web Audio API (`src/lib/client/sound.svelte.js`)
+  rather than loaded from audio files, so there's nothing to download and no
+  licensing to worry about. There's a mute toggle (🔊/🔇) in the top bar; the
+  preference is remembered in `localStorage`.
+- **Confetti** — a small burst when you personally score a point, and a
+  bigger celebration when the game ends (via the `canvas-confetti` package).
+- **Connection toasts** — if someone's connection drops or comes back
+  mid-game, everyone else sees a small "so-and-so disconnected/reconnected"
+  notification, so a quiet phone doesn't get mistaken for someone ignoring
+  their turn.
+- **Animated scores** — points count up smoothly instead of jumping (via
+  Svelte 5's `Tween` from `svelte/motion`, see `src/lib/components/AnimatedScore.svelte`),
+  including a slightly slower, more dramatic count-up on the final scoreboard.
+- **"Your turn" tab title** — if you background the tab while it's your turn
+  to vote/answer, the document title flashes ("🔴 Sıra sende!") until you
+  come back or the round moves on, so you don't accidentally sit out a round.
+- A **bouncing-dots loader** (`src/lib/components/LoadingDots.svelte`)
+  replaces the plain "connecting…" text while the socket connects.
+
 ## Tests
 
 Instead of a real browser, there are integration tests that verify the
@@ -126,10 +152,13 @@ node tests/edge-cases.test.mjs
 node tests/new-features.test.mjs
 node tests/reconnect-mid-game.test.mjs
 node tests/yalanci-kim.test.mjs
+node tests/awards.test.mjs
 ```
 
 - `edge-cases.test.mjs` — too few players, blocking late joins, ownership
-  surviving a brief disconnect, ownership transfer on a permanent departure.
+  surviving a brief disconnect, ownership transfer on a permanent departure,
+  mode selection being required/enforced, and `player_left`/`player_returned`
+  connection notifications reaching everyone except the affected player.
 - `new-features.test.mjs` — ownership transfer, kicking a player, a round
   auto-resolving when its timer runs out.
 - `reconnect-mid-game.test.mjs` — a player reconnecting after the game has
@@ -138,6 +167,8 @@ node tests/yalanci-kim.test.mjs
 - `yalanci-kim.test.mjs` — the writing/voting exclusion rules (the asker can
   neither write nor vote), scoring for correct guesses + fooling + the
   asker's bonus, and forced progress when time runs out.
+- `awards.test.mjs` — end-game superlatives only appear for modes that were
+  actually played, and every award has a well-formed winner/description.
 
 Test durations can be shortened via the `OWNER_GRACE_MS` and
 `ROUND_DURATION_MS` environment variables, e.g.

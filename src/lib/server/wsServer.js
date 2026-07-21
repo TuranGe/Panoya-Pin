@@ -37,6 +37,15 @@ function sendError(ws, message) {
 	safeSend(ws, { type: 'error', message });
 }
 
+/** Belirtilen ws hariç, odadaki bağlı herkese küçük bir bildirim gönderir (ör. "X bağlantısı koptu"). */
+function notifyOthers(room, payload, exceptWs) {
+	for (const player of room.players.values()) {
+		if (!player.connected) continue;
+		if (player.ws === exceptWs) continue;
+		safeSend(player.ws, payload);
+	}
+}
+
 function broadcastRoom(room) {
 	const state = getPublicState(room);
 	const round = room.currentRound;
@@ -131,12 +140,16 @@ function handleMessage(ws, msg) {
 			const room = getRoom(msg.code);
 			const player = room && room.players.get(msg.playerId);
 			if (!room || !player) return sendError(ws, 'SESSION_NOT_FOUND');
+			const wasDisconnected = !player.connected;
 			player.ws = ws;
 			player.connected = true;
 			ws._roomCode = room.code;
 			ws._playerId = player.id;
 			if (room.ownerId === player.id) clearOwnerGraceTimer(room);
 			safeSend(ws, { type: 'joined', code: room.code, playerId: player.id });
+			if (wasDisconnected) {
+				notifyOthers(room, { type: 'player_returned', nickname: player.nickname }, ws);
+			}
 			broadcastRoom(room);
 			break;
 		}
@@ -234,7 +247,9 @@ function handleMessage(ws, msg) {
 		case 'leave': {
 			const room = getRoom(ws._roomCode);
 			if (room && ws._playerId) {
+				const player = room.players.get(ws._playerId);
 				markDisconnected(room, ws._playerId, () => broadcastRoom(room));
+				if (player) notifyOthers(room, { type: 'player_left', nickname: player.nickname }, ws);
 				broadcastRoom(room);
 			}
 			break;
@@ -285,7 +300,9 @@ export function attachGameServer(httpServer) {
 		ws.on('close', () => {
 			const room = getRoom(ws._roomCode);
 			if (!room || !ws._playerId) return;
+			const player = room.players.get(ws._playerId);
 			markDisconnected(room, ws._playerId, () => broadcastRoom(room));
+			if (player) notifyOthers(room, { type: 'player_left', nickname: player.nickname }, ws);
 			broadcastRoom(room);
 		});
 	});

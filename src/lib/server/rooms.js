@@ -21,7 +21,7 @@ const PLAYER_COLORS = [
 function generateCode() {
 	let code;
 	do {
-		code = Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+		code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 	} while (rooms.has(code));
 	return code;
 }
@@ -34,7 +34,32 @@ function generateCode() {
  * @property {number} score
  * @property {boolean} connected
  * @property {any} ws
+ * @property {PlayerStats} stats
  */
+
+/**
+ * @typedef {Object} PlayerStats
+ * @property {number} kimYaparVotesReceived - Kim Yapar? turlarında toplam alınan oy
+ * @property {number} kimYaparCorrect - Kim Yapar?'da çoğunlukla aynı kişiyi kaç kez seçti
+ * @property {number} yalanciFooled - Yalancı Kim?'de sahte cevabıyla kaç kişiyi kandırdı
+ * @property {number} yalanciCorrect - Yalancı Kim?'de gerçek cevabı kaç kez buldu
+ * @property {number} yalanciTimesFooled - Yalancı Kim?'de kaç kez kandı
+ * @property {number} bestRoundGain - Tek bir turda kazandığı en yüksek puan
+ * @property {number} bestRoundNumber - O turun numarası
+ */
+
+/** Oyun sonu ödülleri için tutulan sayaçların temiz hâli. */
+export function freshStats() {
+	return {
+		kimYaparVotesReceived: 0,
+		kimYaparCorrect: 0,
+		yalanciFooled: 0,
+		yalanciCorrect: 0,
+		yalanciTimesFooled: 0,
+		bestRoundGain: 0,
+		bestRoundNumber: 0
+	};
+}
 
 /**
  * @typedef {Object} Room
@@ -78,7 +103,7 @@ export function getRoom(code) {
 export function addPlayer(room, { id, nickname, ws }) {
 	const color = PLAYER_COLORS[room.players.size % PLAYER_COLORS.length];
 	/** @type {Player} */
-	const player = { id, nickname, color, score: 0, connected: true, ws };
+	const player = { id, nickname, color, score: 0, connected: true, ws, stats: freshStats() };
 	room.players.set(id, player);
 	if (!room.ownerId) room.ownerId = id; // odayı kuran ilk kişi sahibi olur
 	return player;

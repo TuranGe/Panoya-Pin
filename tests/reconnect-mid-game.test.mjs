@@ -34,7 +34,7 @@ async function main() {
 	await w3((m) => m.type === 'joined');
 	await wOwner((m) => m.state?.players.length === 3);
 
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'kim_yapar' });
 	await wOwner((m) => m.state?.phase === 'collecting');
 	for (const [i, p] of [owner, p2, p3].entries()) send(p, { type: 'submit_prompt', text: `s${i}` });
 	await wOwner((m) => m.state?.submittedCount === 3);

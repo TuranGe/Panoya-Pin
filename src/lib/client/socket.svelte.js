@@ -21,8 +21,17 @@ function makeStore() {
 		isExcluded: false,
 		myFakeSubmitted: false,
 		error: null,
-		kickedAt: null
+		kickedAt: null,
+		notifications: [] // {id, text, kind: 'left' | 'returned'} — birkaç saniye sonra otomatik silinir
 	});
+
+	function pushNotification(text, kind) {
+		const id = crypto.randomUUID();
+		store.notifications = [...store.notifications, { id, text, kind }];
+		setTimeout(() => {
+			store.notifications = store.notifications.filter((n) => n.id !== id);
+		}, 4000);
+	}
 
 	function persist() {
 		if (!browser) return;
@@ -94,6 +103,12 @@ function makeStore() {
 					clearSession();
 					store.error = 'Oda kurucusu seni bu odadan çıkardı.';
 					store.kickedAt = Date.now();
+					break;
+				case 'player_left':
+					pushNotification(`${msg.nickname} bağlantısı koptu`, 'left');
+					break;
+				case 'player_returned':
+					pushNotification(`${msg.nickname} geri bağlandı`, 'returned');
 					break;
 			}
 		};

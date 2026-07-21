@@ -44,7 +44,7 @@ async function main() {
 	await wOwner((m) => m.state?.players.length === 4);
 	console.log('--- 4 oyuncu odada ---');
 
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'yalanci' });
 	await wOwner((m) => m.state?.phase === 'collecting');
 
 	const trueAnswers = { A: 'Mavi', B: 'Örümcek', C: 'Bisiklet takla', D: 'Mantı' };
@@ -135,7 +135,7 @@ async function testTimeoutPath() {
 	}
 	await wOwner((m) => m.state?.players.length === 3);
 
-	send(owner, { type: 'start_collecting' });
+	send(owner, { type: 'start_collecting', mode: 'yalanci' });
 	await wOwner((m) => m.state?.phase === 'collecting');
 	// Havuzu (MIN_POOL_TO_START=4) tamamen "yalanci" tipiyle dolduruyoruz ki rastgele
 	// varsayılan dolgu (kim_yapar da olabilir) devreye girmesin ve tur 1 kesin yalanci olsun.

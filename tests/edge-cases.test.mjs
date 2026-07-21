@@ -72,6 +72,11 @@ async function main() {
 	p1.close();
 	await wOwner((m) => m.state?.players.find((pl) => pl.id === playerId)?.connected === false);
 	console.log('✅ Kopan oyuncu "connected:false" olarak işaretlendi');
+	await sleep(150);
+	// Not: paylaşılan imleçli waiter yukarıdaki bekleme sırasında bu mesajı atlamış olabilir,
+	// bu yüzden bildirimleri doğrudan tam geçmişte arıyoruz.
+	console.log('✅ Diğer oyuncular "player_left" bildirimini aldı:', owner.history.some((m) => m.type === 'player_left' && m.nickname === 'Test1'));
+	console.log('✅ p2 de bildirimi aldı:', p2.history.some((m) => m.type === 'player_left' && m.nickname === 'Test1'));
 
 	const p1b = await connect();
 	const w1b = waiterFor(p1b);
@@ -79,6 +84,12 @@ async function main() {
 	await w1b((m) => m.type === 'joined');
 	await wOwner((m) => m.state?.players.find((pl) => pl.id === playerId)?.connected === true);
 	console.log('✅ Rejoin ile oyuncu tekrar "connected:true" oldu');
+	await sleep(150);
+
+	console.log('✅ Diğer oyuncular "player_returned" bildirimini aldı:', owner.history.some((m) => m.type === 'player_returned' && m.nickname === 'Test1'));
+	// Geri dönen oyuncunun kendisi kendi bildirimini almamalı
+	const gotOwnNotice = p1b.history.some((m) => m.type === 'player_returned');
+	console.log('✅ Geri dönen oyuncu kendi bildirimini almadı:', !gotOwnNotice);
 
 	// --- Owner sayfayı yeniler gibi hızlıca kopup geri dönerse sahiplik değişmemeli ---
 	owner.close();

@@ -6,4 +6,3 @@ build/
 !.env.example
 .DS_Store
 *.log
-.vscode/

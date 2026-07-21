@@ -1,4 +1,5 @@
 import { DEFAULT_KIM_YAPAR_PROMPTS, DEFAULT_YALANCI_PROMPTS } from './seedPrompts.js';
+import { freshStats } from './rooms.js';
 
 export const MIN_PLAYERS = 3;
 export const MIN_POOL_TO_START = 4;
@@ -28,6 +29,22 @@ function eligiblePlayers(room, round) {
 		return connected.filter((p) => p.id !== round.authorId);
 	}
 	return connected;
+}
+
+function captureScores(room) {
+	return new Map([...room.players.entries()].map(([id, p]) => [id, p.score]));
+}
+
+/** Bir tur açıldıktan sonra, o turda en çok puan kazanan oyuncuyu "Görkemli Tur" ödülü için not eder. */
+function applyBestRoundGains(room, before) {
+	for (const [id, player] of room.players.entries()) {
+		const prev = before.get(id) ?? player.score;
+		const gain = player.score - prev;
+		if (gain > player.stats.bestRoundGain) {
+			player.stats.bestRoundGain = gain;
+			player.stats.bestRoundNumber = room.roundNumber;
+		}
+	}
 }
 
 // --- İçerik girişi ---
@@ -197,6 +214,7 @@ export function revealRound(room) {
 
 function revealKimYaparRound(room, round) {
 	round.revealed = true;
+	const before = captureScores(room);
 
 	const tally = new Map();
 	for (const votedForId of round.votes.values()) {
@@ -208,20 +226,30 @@ function revealKimYaparRound(room, round) {
 
 	for (const [voterId, votedForId] of round.votes.entries()) {
 		const voter = room.players.get(voterId);
-		if (voter && topPlayerIds.has(votedForId)) voter.score += POINTS_FOR_MATCH;
+		if (voter && topPlayerIds.has(votedForId)) {
+			voter.score += POINTS_FOR_MATCH;
+			voter.stats.kimYaparCorrect += 1;
+		}
 	}
 	for (const id of topPlayerIds) {
 		const p = room.players.get(id);
 		if (p) p.score += POINTS_FOR_BEING_ICONIC;
 	}
+	// Turu kazanmasa da, kime kaç oy geldiği "İkon" ödülü için ayrıca birikir
+	for (const [playerId, count] of tally.entries()) {
+		const p = room.players.get(playerId);
+		if (p) p.stats.kimYaparVotesReceived += count;
+	}
 
 	round.tally = tally;
 	round.topPlayerIds = topPlayerIds;
+	applyBestRoundGains(room, before);
 }
 
 function revealYalanciRound(room, round) {
 	if (round.subPhase === 'writing') startVotingSubPhase(round);
 	round.revealed = true;
+	const before = captureScores(room);
 
 	/** @type {Map<string, number>} ownerId -> oy sayısı */
 	const tally = new Map();
@@ -232,16 +260,24 @@ function revealYalanciRound(room, round) {
 
 	for (const [voterId, token] of round.votes.entries()) {
 		const ownerId = round.optionTokens.get(token);
+		const voter = room.players.get(voterId);
 		if (ownerId === TRUE_OWNER) {
-			const voter = room.players.get(voterId);
-			if (voter) voter.score += POINTS_YALANCI_CORRECT;
+			if (voter) {
+				voter.score += POINTS_YALANCI_CORRECT;
+				voter.stats.yalanciCorrect += 1;
+			}
+		} else if (voter) {
+			voter.stats.yalanciTimesFooled += 1;
 		}
 	}
 	for (const fakerId of round.fakeAnswers.keys()) {
 		const fooled = tally.get(fakerId) || 0;
 		if (fooled > 0) {
 			const faker = room.players.get(fakerId);
-			if (faker) faker.score += fooled * POINTS_YALANCI_PER_FOOL;
+			if (faker) {
+				faker.score += fooled * POINTS_YALANCI_PER_FOOL;
+				faker.stats.yalanciFooled += fooled;
+			}
 		}
 	}
 	if (round.authorId) {
@@ -250,6 +286,7 @@ function revealYalanciRound(room, round) {
 	}
 
 	round.tally = tally;
+	applyBestRoundGains(room, before);
 }
 
 export function resetForReplay(room) {
@@ -258,12 +295,116 @@ export function resetForReplay(room) {
 	room.roundNumber = 0;
 	room.usedIds = new Set();
 	room.currentRound = null;
-	for (const p of room.players.values()) p.score = 0;
+	for (const p of room.players.values()) {
+		p.score = 0;
+		p.stats = freshStats();
+	}
 	// room.pool bilerek temizlenmiyor: grubun girdiği içerikler bir sonraki oyunda da kullanılabilsin
 }
 
 export function roundsRemaining(room) {
 	return room.pool.filter((p) => !room.usedIds.has(p.id)).length;
+}
+
+// --- Oyun sonu ödülleri ---
+
+/** Oyun boyunca oynanmış turların türlerine göre en yüksek istatistiğe sahip oyuncuyu bulur. */
+function topBy(players, statFn, min = 1) {
+	let best = null;
+	for (const p of players) {
+		const v = statFn(p.stats);
+		if (v >= min && (!best || v > statFn(best.stats))) best = p;
+	}
+	return best;
+}
+
+export function computeAwards(room) {
+	const players = [...room.players.values()];
+	if (players.length === 0) return [];
+
+	const playedTypes = new Set(room.pool.filter((p) => room.usedIds.has(p.id)).map((p) => p.type));
+	const kimYaparPlayed = playedTypes.has('kim_yapar');
+	const yalanciPlayed = playedTypes.has('yalanci');
+
+	const awards = [];
+
+	if (kimYaparPlayed) {
+		const icon = topBy(players, (s) => s.kimYaparVotesReceived);
+		if (icon) {
+			awards.push({
+				key: 'icon',
+				emoji: '🎯',
+				title: 'İkon',
+				nickname: icon.nickname,
+				color: icon.color,
+				description: `Kim Yapar? turlarında toplam ${icon.stats.kimYaparVotesReceived} oy aldı`
+			});
+		}
+	}
+
+	if (yalanciPlayed) {
+		const liar = topBy(players, (s) => s.yalanciFooled);
+		if (liar) {
+			awards.push({
+				key: 'liar',
+				emoji: '🎭',
+				title: 'En İyi Yalancı',
+				nickname: liar.nickname,
+				color: liar.color,
+				description: `Sahte cevaplarıyla ${liar.stats.yalanciFooled} kişiyi kandırdı`
+			});
+		}
+
+		const gullible = topBy(players, (s) => s.yalanciTimesFooled);
+		if (gullible) {
+			awards.push({
+				key: 'gullible',
+				emoji: '😅',
+				title: 'En Kolay Kanan',
+				nickname: gullible.nickname,
+				color: gullible.color,
+				description: `${gullible.stats.yalanciTimesFooled} kez sahte cevaba kandı`
+			});
+		}
+	}
+
+	const detective = topBy(players, (s) => s.kimYaparCorrect + s.yalanciCorrect);
+	if (detective) {
+		awards.push({
+			key: 'detective',
+			emoji: '🔍',
+			title: 'Dedektif',
+			nickname: detective.nickname,
+			color: detective.color,
+			description: `${detective.stats.kimYaparCorrect + detective.stats.yalanciCorrect} kez gerçeği/çoğunluğu buldu`
+		});
+	}
+
+	if (players.length > 1) {
+		const blackSheep = [...players].sort((a, b) => a.score - b.score)[0];
+		awards.push({
+			key: 'blacksheep',
+			emoji: '🐑',
+			title: 'Kara Koyun',
+			nickname: blackSheep.nickname,
+			color: blackSheep.color,
+			description: `${blackSheep.score} puanla listeyi kapattı`
+		});
+	}
+
+	const bestRound = topBy(players, (s) => s.bestRoundGain);
+	if (bestRound) {
+		awards.push({
+			key: 'bestround',
+			emoji: '⚡',
+			title: 'Görkemli Tur',
+			nickname: bestRound.nickname,
+			color: bestRound.color,
+			description: `Tur ${bestRound.stats.bestRoundNumber}'de tek seferde ${bestRound.stats.bestRoundGain} puan kazandı`
+		});
+	}
+
+	return awards;
 }
 
 // --- Dışa açık (client'a giden) state ---
@@ -353,6 +494,7 @@ export function getPublicState(room) {
 		submittedCount: room.pool.filter((p) => !p.isDefault).length,
 		roundNumber: room.roundNumber,
 		roundsRemaining: roundsRemaining(room),
-		currentRound: serializeCurrentRound(room)
+		currentRound: serializeCurrentRound(room),
+		awards: room.phase === 'results' ? computeAwards(room) : null
 	};
 }

@@ -3,6 +3,10 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { gameStore } from '$lib/client/socket.svelte.js';
+	import { sound } from '$lib/client/sound.svelte.js';
+	import confetti from 'canvas-confetti';
+	import AnimatedScore from '$lib/components/AnimatedScore.svelte';
+	import LoadingDots from '$lib/components/LoadingDots.svelte';
 
 	const store = gameStore.state;
 	const code = page.params.code.toUpperCase();
@@ -17,12 +21,21 @@
 	let mySubmissions = $state([]);
 	let linkCopied = $state(false);
 	let now = $state(Date.now());
+	let pageHidden = $state(false);
 
 	onMount(() => {
 		gameStore.forgetIfDifferentRoom(code);
 		gameStore.connect();
 		const timer = setInterval(() => (now = Date.now()), 1000);
-		return () => clearInterval(timer);
+
+		const handleVisibility = () => (pageHidden = document.hidden);
+		document.addEventListener('visibilitychange', handleVisibility);
+		pageHidden = document.hidden;
+
+		return () => {
+			clearInterval(timer);
+			document.removeEventListener('visibilitychange', handleVisibility);
+		};
 	});
 
 	// Oyuncu odadan atıldıysa ana sayfaya dön (hata mesajı orada gösterilir).
@@ -57,10 +70,118 @@
 			: null
 	);
 
+	// Sırası gelip henüz katılmamış mı? (oy vermedi / sahte cevap yazmadı, ve dışlanmış değil)
+	const needsResponse = $derived.by(() => {
+		if (!game || game.phase !== 'playing' || !game.currentRound || game.currentRound.revealed) return false;
+		if (game.currentRound.type === 'kim_yapar') return store.myVote === null;
+		if (store.isExcluded) return false;
+		if (game.currentRound.subPhase === 'writing') return !store.myFakeSubmitted;
+		return store.myVote === null;
+	});
+
+	// Sekme arka plandayken sırası gelen oyuncunun kaçırmaması için başlığı yanıp söndürür.
+	let titleFlashTimer = null;
+	const baseTitle = `${code} — Panoya Pin`;
+	$effect(() => {
+		if (needsResponse && pageHidden) {
+			if (titleFlashTimer) return;
+			let on = false;
+			titleFlashTimer = setInterval(() => {
+				document.title = on ? baseTitle : '🔴 Sıra sende! — Panoya Pin';
+				on = !on;
+			}, 1000);
+		} else if (titleFlashTimer) {
+			clearInterval(titleFlashTimer);
+			titleFlashTimer = null;
+			document.title = baseTitle;
+		}
+	});
+
+	// --- Ses efektleri ve konfeti: oyun akışındaki geçişleri izleyip tetikler ---
+	function fireMiniConfetti() {
+		confetti({
+			particleCount: 26,
+			spread: 55,
+			startVelocity: 26,
+			origin: { y: 0.7 },
+			scalar: 0.8,
+			colors: ['#FFD23F', '#FF3E7A', '#3DDC84']
+		});
+	}
+
+	function fireWinnerConfetti(color) {
+		const colors = [color, '#FFD23F', '#FF3E7A', '#3DDC84', '#3E8EFF'].filter(Boolean);
+		confetti({ particleCount: 90, spread: 100, startVelocity: 38, origin: { y: 0.4 }, colors });
+		const end = Date.now() + 700;
+		(function frame() {
+			confetti({ particleCount: 5, angle: 60, spread: 60, origin: { x: 0 }, colors });
+			confetti({ particleCount: 5, angle: 120, spread: 60, origin: { x: 1 }, colors });
+			if (Date.now() < end) requestAnimationFrame(frame);
+		})();
+	}
+
+	let scoreInitialized = false;
+	let lastScore = 0;
+	let lastRoundKey = null;
+	let lastRevealed = false;
+	let lastTickSecond = null;
+	let resultsCelebrated = false;
+
+	// Kendi puanın artınca (tur sırasında) ufak bir ses + konfeti
+	$effect(() => {
+		if (!me) return;
+		if (!scoreInitialized) {
+			scoreInitialized = true;
+			lastScore = me.score;
+			return;
+		}
+		if (me.score > lastScore && game?.phase === 'playing') {
+			sound.scorePoint();
+			fireMiniConfetti();
+		}
+		lastScore = me.score;
+	});
+
+	// Yeni tur başladığında
+	$effect(() => {
+		if (game?.phase !== 'playing' || !game.currentRound) return;
+		if (game.roundNumber !== lastRoundKey) {
+			lastRoundKey = game.roundNumber;
+			sound.roundStart();
+		}
+	});
+
+	// Sonuçlar açıldığında
+	$effect(() => {
+		const revealed = game?.currentRound?.revealed ?? false;
+		if (revealed && !lastRevealed) sound.reveal();
+		lastRevealed = revealed;
+	});
+
+	// Son 5 saniyede tık sesi
+	$effect(() => {
+		if (secondsLeft !== null && secondsLeft > 0 && secondsLeft <= 5 && secondsLeft !== lastTickSecond) {
+			lastTickSecond = secondsLeft;
+			sound.tick();
+		}
+		if (secondsLeft === null) lastTickSecond = null;
+	});
+
+	// Oyun bitince fanfar + konfeti (yeniden oynanırsa bir sonraki bitişte tekrar tetiklenir)
+	$effect(() => {
+		if (game?.phase === 'results' && !resultsCelebrated) {
+			resultsCelebrated = true;
+			sound.winner();
+			fireWinnerConfetti(game.players[0]?.color);
+		}
+		if (game?.phase !== 'results') resultsCelebrated = false;
+	});
+
 	function handleJoin(e) {
 		e.preventDefault();
 		const name = nickname.trim();
 		if (!name) return;
+		sound.unlock();
 		joining = true;
 		gameStore.clearError();
 		gameStore.joinRoom(code, name);
@@ -126,21 +247,29 @@
 			</form>
 		</div>
 	{:else if !game}
-		<p class="loading hand">bağlanıyor…</p>
+		<div class="loading-wrap">
+			<LoadingDots />
+			<p class="loading hand">bağlanıyor…</p>
+		</div>
 	{:else}
 		<header class="topbar">
 			<div class="brand hand">Panoya Pin</div>
-			<button class="code-chip" onclick={copyLink} type="button">
-				<span class="code">{code}</span>
-				<span class="copy-hint">{linkCopied ? 'Kopyalandı ✓' : 'Davet linkini kopyala'}</span>
-			</button>
+			<div class="topbar-actions">
+				<button class="sound-toggle" onclick={() => sound.toggle()} type="button" title={sound.enabled ? 'Sesi kapat' : 'Sesi aç'}>
+					{sound.enabled ? '🔊' : '🔇'}
+				</button>
+				<button class="code-chip" onclick={copyLink} type="button">
+					<span class="code">{code}</span>
+					<span class="copy-hint">{linkCopied ? 'Kopyalandı ✓' : 'Davet linkini kopyala'}</span>
+				</button>
+			</div>
 		</header>
 
 		<div class="me-bar">
 			<span class="dot" style="background:{me?.color}"></span>
 			<span class="name">{me?.nickname}</span>
 			{#if isOwner}<span class="owner-tag">★ kurucu</span>{/if}
-			<span class="score">{me?.score ?? 0} puan</span>
+			<span class="score"><AnimatedScore value={me?.score ?? 0} /> puan</span>
 		</div>
 
 		{#if game.phase === 'lobby'}
@@ -410,7 +539,7 @@
 						<li>
 							<span class="dot" style="background:{p.color}"></span>
 							<span class="name">{p.nickname}</span>
-							<span class="score">{p.score}</span>
+							<span class="score"><AnimatedScore value={p.score} /></span>
 						</li>
 					{/each}
 				</ol>
@@ -424,13 +553,27 @@
 						{game.players[0].nickname}
 					</h2>
 				{/if}
+
+				{#if game.awards && game.awards.length > 0}
+					<div class="awards-grid">
+						{#each game.awards as a, i (a.key)}
+							<div class="note note--tilt-{['a', 'b', 'c'][i % 3]} award-card">
+								<span class="award-emoji">{a.emoji}</span>
+								<span class="award-title">{a.title}</span>
+								<span class="award-winner" style="color:{a.color}">{a.nickname}</span>
+								<span class="award-desc">{a.description}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
 				<ol class="scoreboard final panel">
 					{#each game.players as p, i (p.id)}
 						<li>
 							<span class="rank">{i + 1}</span>
 							<span class="dot" style="background:{p.color}"></span>
 							<span class="name">{p.nickname}</span>
-							<span class="score">{p.score}</span>
+							<span class="score"><AnimatedScore value={p.score} duration={900} /></span>
 						</li>
 					{/each}
 				</ol>
@@ -446,6 +589,16 @@
 		{#if store.error}
 			<p class="error toast">{store.error}</p>
 		{/if}
+
+		{#if store.notifications.length > 0}
+			<div class="notif-stack">
+				{#each store.notifications as n (n.id)}
+					<p class="notif-pill" class:returned={n.kind === 'returned'}>
+						{n.kind === 'returned' ? '🟢' : '🔴'} {n.text}
+					</p>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </main>
 
@@ -460,10 +613,16 @@
 		letter-spacing: 0.2em;
 		text-align: center;
 	}
+	.loading-wrap {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		margin-top: 4rem;
+	}
 	.loading {
 		font-size: 1.3rem;
 		color: var(--ink);
-		margin-top: 4rem;
 		text-align: center;
 	}
 
@@ -479,6 +638,29 @@
 		font-size: 1.5rem;
 		color: var(--ink);
 		flex-shrink: 0;
+	}
+	.topbar-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.sound-toggle {
+		appearance: none;
+		border: 3px solid var(--ink);
+		background: var(--paper);
+		border-radius: 50%;
+		width: 2.6rem;
+		height: 2.6rem;
+		flex-shrink: 0;
+		font-size: 1.1rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 3px 4px 0 var(--ink);
+	}
+	.sound-toggle:active {
+		transform: translateY(2px);
+		box-shadow: 1px 2px 0 var(--ink);
 	}
 	.code-chip {
 		appearance: none;
@@ -903,6 +1085,49 @@
 		font-family: var(--font-hand);
 	}
 
+	.awards-grid {
+		width: 100%;
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 1.1rem;
+		margin: 0.5rem 0 2rem;
+	}
+	@media (min-width: 480px) {
+		.awards-grid {
+			grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+		}
+	}
+	.award-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		text-align: center;
+		padding: 1.1rem 0.9rem;
+	}
+	.award-emoji {
+		font-size: 1.8rem;
+	}
+	.award-title {
+		font-family: var(--font-display);
+		font-weight: 700;
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		opacity: 0.7;
+	}
+	.award-winner {
+		font-family: var(--font-display);
+		font-weight: 800;
+		font-size: 1.3rem;
+	}
+	.award-desc {
+		font-size: 0.8rem;
+		font-weight: 500;
+		line-height: 1.3;
+		opacity: 0.85;
+	}
+
 	.final-actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -938,5 +1163,43 @@
 		left: 50%;
 		translate: -50% 0;
 		box-shadow: 3px 4px 0 var(--ink);
+	}
+
+	.notif-stack {
+		position: fixed;
+		top: 1rem;
+		left: 50%;
+		translate: -50% 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		align-items: center;
+		z-index: 40;
+		pointer-events: none;
+	}
+	.notif-pill {
+		margin: 0;
+		background: var(--paper);
+		color: var(--ink);
+		border: 2px solid var(--ink);
+		border-radius: 999px;
+		padding: 0.4rem 0.9rem;
+		font-size: 0.85rem;
+		font-weight: 700;
+		box-shadow: 3px 4px 0 var(--ink);
+		animation: notif-in 0.25s ease both;
+	}
+	.notif-pill.returned {
+		background: var(--mint);
+	}
+	@keyframes notif-in {
+		from {
+			opacity: 0;
+			transform: translateY(-8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>
