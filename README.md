@@ -13,7 +13,7 @@ else, they just hold the authority to advance the game (the "★ host" badge).
 ## How to play
 
 1. Someone hits **"Create Room"** on the homepage, enters a nickname → gets a
-   4-letter room code and joins the game as the "host".
+   6-letter room code and joins the game as the "host".
 2. Everyone else hits **"Join Room"** and enters the code and their own
    nickname — from their own phone or computer, wherever they are.
 3. **Mode select**: in the lobby, the host picks the game mode before opening
@@ -45,8 +45,7 @@ else, they just hold the authority to advance the game (the "★ host" badge).
 If not enough content was submitted (fewer than four), the system
 automatically fills the gap with a few ready-made questions/scenarios
 matching the chosen mode, so the game stays playable even on a first try
-with just 3
-people.
+with just 3 people.
 
 Every round has a **25-second timer**; when it runs out, anyone who hasn't
 responded is simply counted as having passed, and the round resolves
@@ -199,30 +198,6 @@ mode.
   which one is real. Guessing correctly scores +10; each person you fool with
   your fake answer scores you +5; the asker gets a flat +5. The asker can
   neither write nor vote (they already know the answer).
-
-To add a new mode:
-
-- `src/lib/server/gameLogic.js` — a mode's round/voting/scoring logic,
-  and add its identifier to `VALID_MODES`
-- `src/lib/server/wsServer.js` — the message types that drive that logic
-- `src/routes/play/[code]/+page.svelte` — the UI for that phase (mode card
-  in the lobby, prompt form in the collecting phase, round UI in-game)
-
-One idea for what's next: **"Whose Line Is It?"** — real quotes/moments are
-shown, and players guess who they belong to.
-
-## Roadmap / deliberately out of scope
-
-- **Persistent group library**: prompts only live in memory for the lifetime
-  of a room (cleaned up after 10 minutes of inactivity). If you want the same
-  group to keep adding to the same library week after week, the natural next
-  step is tying the pool to a persistent "group code" instead of the
-  ephemeral room code, and writing it to a lightweight database like
-  SQLite/Drizzle.
-- **Content moderation**: this was designed as a friend-group game (everyone
-  trusts each other). If you're planning a public, multi-tenant version open
-  to strangers, you'll want a moderation/reporting mechanism for submitted
-  text.
 
 ## License
 

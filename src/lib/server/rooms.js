@@ -21,7 +21,7 @@ const PLAYER_COLORS = [
 function generateCode() {
 	let code;
 	do {
-		code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+		code = Array.from({ length: 6 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 	} while (rooms.has(code));
 	return code;
 }

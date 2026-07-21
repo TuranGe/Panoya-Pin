@@ -23,7 +23,7 @@
 		e.preventDefault();
 		const cleanCode = code.trim().toUpperCase();
 		const name = nickname.trim();
-		if (cleanCode.length !== 4 || !name) return;
+		if (cleanCode.length !== 6 || !name) return;
 		sound.unlock();
 		busy = true;
 		gameStore.clearError();
@@ -78,7 +78,7 @@
 			<input
 				class="input code-input"
 				placeholder="ODA KODU"
-				maxlength="4"
+				maxlength="6"
 				bind:value={code}
 				oninput={() => (code = code.toUpperCase())}
 				autocomplete="off"
@@ -86,7 +86,7 @@
 			/>
 			<input class="input" placeholder="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
 			{#if store.error}<p class="error">{store.error}</p>{/if}
-			<button class="btn btn-yellow big" type="submit" disabled={code.trim().length !== 4 || !nickname.trim() || busy}>
+			<button class="btn btn-yellow big" type="submit" disabled={code.trim().length !== 6 || !nickname.trim() || busy}>
 				{busy ? 'Katılıyor…' : 'Katıl'}
 			</button>
 			<button class="btn btn-secondary" type="button" onclick={() => (mode = 'landing')}>Geri</button>
