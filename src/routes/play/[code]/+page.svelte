@@ -7,6 +7,7 @@
 	import confetti from 'canvas-confetti';
 	import AnimatedScore from '$lib/components/AnimatedScore.svelte';
 	import LoadingDots from '$lib/components/LoadingDots.svelte';
+	import { shareOrDownloadResultCard } from '$lib/client/shareCard.js';
 
 	const store = gameStore.state;
 	const code = page.params.code.toUpperCase();
@@ -14,6 +15,7 @@
 	let nickname = $state(store.nickname || '');
 	let joining = $state(false);
 	let selectedMode = $state(null); // owner'ın lobide seçtiği mod: 'kim_yapar' | 'yalanci' | 'mixed'
+	let selectedRounds = $state(null); // 5 | 10 | 15 | null ("Tümü")
 	let promptType = $state('kim_yapar'); // sadece 'mixed' modda kullanılan besleme sekmesi
 	let promptText = $state('');
 	let promptAnswer = $state('');
@@ -98,7 +100,12 @@
 	});
 
 	// --- Ses efektleri ve konfeti: oyun akışındaki geçişleri izleyip tetikler ---
+	function prefersReducedMotion() {
+		return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+	}
+
 	function fireMiniConfetti() {
+		if (prefersReducedMotion()) return;
 		confetti({
 			particleCount: 26,
 			spread: 55,
@@ -110,6 +117,7 @@
 	}
 
 	function fireWinnerConfetti(color) {
+		if (prefersReducedMotion()) return;
 		const colors = [color, '#FFD23F', '#FF3E7A', '#3DDC84', '#3E8EFF'].filter(Boolean);
 		confetti({ particleCount: 90, spread: 100, startVelocity: 38, origin: { y: 0.4 }, colors });
 		const end = Date.now() + 700;
@@ -229,6 +237,23 @@
 			gameStore.kickPlayer(p.id);
 		}
 	}
+
+	let sharingCard = $state(false);
+	async function handleShareCard() {
+		if (!game || sharingCard) return;
+		sharingCard = true;
+		try {
+			await shareOrDownloadResultCard({
+				code,
+				winnerName: game.players[0]?.nickname,
+				winnerColor: game.players[0]?.color,
+				awards: game.awards || [],
+				players: game.players
+			});
+		} finally {
+			sharingCard = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -241,8 +266,8 @@
 			<span class="eyebrow">Odaya katıl</span>
 			<h1 class="display code-hero">{code}</h1>
 			<form onsubmit={handleJoin} class="stack">
-				<input class="input" placeholder="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
-				{#if store.error}<p class="error">{store.error}</p>{/if}
+				<input class="input" placeholder="Takma adın" aria-label="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
+				{#if store.error}<p class="error" role="alert">{store.error}</p>{/if}
 				<button class="btn btn-primary big" type="submit" disabled={!nickname.trim() || joining}>Katıl</button>
 			</form>
 		</div>
@@ -255,10 +280,17 @@
 		<header class="topbar">
 			<div class="brand hand">Panoya Pin</div>
 			<div class="topbar-actions">
-				<button class="sound-toggle" onclick={() => sound.toggle()} type="button" title={sound.enabled ? 'Sesi kapat' : 'Sesi aç'}>
+				<button
+					class="sound-toggle"
+					onclick={() => sound.toggle()}
+					type="button"
+					aria-label={sound.enabled ? 'Sesi kapat' : 'Sesi aç'}
+					aria-pressed={sound.enabled}
+					title={sound.enabled ? 'Sesi kapat' : 'Sesi aç'}
+				>
 					{sound.enabled ? '🔊' : '🔇'}
 				</button>
-				<button class="code-chip" onclick={copyLink} type="button">
+				<button class="code-chip" onclick={copyLink} type="button" aria-label="Oda kodu {code}, davet linkini kopyala">
 					<span class="code">{code}</span>
 					<span class="copy-hint">{linkCopied ? 'Kopyalandı ✓' : 'Davet linkini kopyala'}</span>
 				</button>
@@ -266,7 +298,7 @@
 		</header>
 
 		<div class="me-bar">
-			<span class="dot" style="background:{me?.color}"></span>
+			<span class="dot" style="background:{me?.color}" aria-hidden="true"></span>
 			<span class="name">{me?.nickname}</span>
 			{#if isOwner}<span class="owner-tag">★ kurucu</span>{/if}
 			<span class="score"><AnimatedScore value={me?.score ?? 0} /> puan</span>
@@ -279,9 +311,9 @@
 					<ul class="roster">
 						{#each game.players as p (p.id)}
 							<li class="roster-row" class:offline={!p.connected}>
-								<span class="dot" style="background:{p.color}"></span>
+								<span class="dot" style="background:{p.color}" aria-hidden="true"></span>
 								<span class="rname">{p.nickname}</span>
-								{#if p.id === game.ownerId}<span class="owner-star" title="Oda kurucusu">★</span>{/if}
+								{#if p.id === game.ownerId}<span class="owner-star" title="Oda kurucusu" aria-label="Oda kurucusu">★</span>{/if}
 								{#if !p.connected}<span class="offline-tag">çevrimdışı</span>{/if}
 								{#if isOwner && p.id !== store.playerId}
 									<span class="roster-actions">
@@ -289,10 +321,17 @@
 											class="mini-btn"
 											type="button"
 											title="Sahipliği devret"
+											aria-label="{p.nickname} adlı oyuncuya sahipliği devret"
 											disabled={!p.connected}
 											onclick={() => gameStore.transferOwnership(p.id)}
 										>★</button>
-										<button class="mini-btn danger" type="button" title="Odadan at" onclick={() => confirmKick(p)}>✕</button>
+										<button
+											class="mini-btn danger"
+											type="button"
+											title="Odadan at"
+											aria-label="{p.nickname} adlı oyuncuyu odadan at"
+											onclick={() => confirmKick(p)}
+										>✕</button>
 									</span>
 								{/if}
 							</li>
@@ -303,15 +342,16 @@
 					</ul>
 
 					{#if isOwner}
-						<span class="eyebrow mode-label">Oyun modu</span>
-						<div class="mode-options">
+						<span class="eyebrow mode-label" id="mode-label">Oyun modu</span>
+						<div class="mode-options" role="group" aria-labelledby="mode-label">
 							<button
 								type="button"
 								class="mode-card"
 								class:active={selectedMode === 'kim_yapar'}
+								aria-pressed={selectedMode === 'kim_yapar'}
 								onclick={() => (selectedMode = 'kim_yapar')}
 							>
-								<span class="mode-emoji">🎯</span>
+								<span class="mode-emoji" aria-hidden="true">🎯</span>
 								<span class="mode-name">Kim Yapar?</span>
 								<span class="mode-desc">Grupta kim yapardı, oylayın</span>
 							</button>
@@ -319,9 +359,10 @@
 								type="button"
 								class="mode-card"
 								class:active={selectedMode === 'yalanci'}
+								aria-pressed={selectedMode === 'yalanci'}
 								onclick={() => (selectedMode = 'yalanci')}
 							>
-								<span class="mode-emoji">🎭</span>
+								<span class="mode-emoji" aria-hidden="true">🎭</span>
 								<span class="mode-name">Yalancı Kim?</span>
 								<span class="mode-desc">Sahte cevaplar arasından gerçeği bul</span>
 							</button>
@@ -329,18 +370,32 @@
 								type="button"
 								class="mode-card"
 								class:active={selectedMode === 'mixed'}
+								aria-pressed={selectedMode === 'mixed'}
 								onclick={() => (selectedMode = 'mixed')}
 							>
-								<span class="mode-emoji">🎲</span>
+								<span class="mode-emoji" aria-hidden="true">🎲</span>
 								<span class="mode-name">Karışık</span>
 								<span class="mode-desc">İkisi de karışık gelsin</span>
 							</button>
 						</div>
 
+						<span class="eyebrow mode-label" id="rounds-label">Kaç tur?</span>
+						<div class="round-options" role="group" aria-labelledby="rounds-label">
+							{#each [5, 10, 15, null] as n (n ?? 'all')}
+								<button
+									type="button"
+									class="round-chip"
+									class:active={selectedRounds === n}
+									aria-pressed={selectedRounds === n}
+									onclick={() => (selectedRounds = n)}
+								>{n ?? 'Tümü'}</button>
+							{/each}
+						</div>
+
 						<button
 							class="btn btn-primary big"
 							disabled={game.players.length < MIN_PLAYERS_NOTE || !selectedMode}
-							onclick={() => gameStore.startCollecting(selectedMode)}
+							onclick={() => gameStore.startCollecting(selectedMode, selectedRounds)}
 						>
 							Beslemeyi Başlat
 						</button>
@@ -358,14 +413,16 @@
 		{:else if game.phase === 'collecting'}
 			<section class="stage centered">
 				{#if game.selectedMode === 'mixed'}
-					<div class="type-toggle" role="tablist">
+					<div class="type-toggle" role="group" aria-label="İçerik türü">
 						<button
 							type="button"
+							aria-pressed={promptType === 'kim_yapar'}
 							class:active={promptType === 'kim_yapar'}
 							onclick={() => (promptType = 'kim_yapar')}
 						>Kim Yapar?</button>
 						<button
 							type="button"
+							aria-pressed={promptType === 'yalanci'}
 							class:active={promptType === 'yalanci'}
 							onclick={() => (promptType = 'yalanci')}
 						>Yalancı Kim?</button>
@@ -381,6 +438,7 @@
 						<textarea
 							class="input textarea"
 							placeholder="Örn: Toplantıya en son geç kalan kim olur?"
+							aria-label="Senaryo"
 							maxlength="140"
 							bind:value={promptText}
 						></textarea>
@@ -395,12 +453,14 @@
 						<textarea
 							class="input textarea"
 							placeholder="Örn: Lisede benim lakabım neydi?"
+							aria-label="Soru"
 							maxlength="140"
 							bind:value={promptText}
 						></textarea>
 						<input
 							class="input"
 							placeholder="Gerçek cevap"
+							aria-label="Gerçek cevap"
 							maxlength="80"
 							bind:value={promptAnswer}
 							autocomplete="off"
@@ -433,8 +493,8 @@
 			</section>
 		{:else if game.phase === 'playing' && game.currentRound}
 			<section class="stage centered">
-				<div class="round-head">
-					<p class="round-label eyebrow">Tur {game.roundNumber}</p>
+				<div class="round-head" aria-live="polite">
+					<p class="round-label eyebrow">Tur {game.roundNumber}{game.maxRounds ? ` / ${game.maxRounds}` : ''}</p>
 					{#if secondsLeft !== null}
 						<span class="timer-pill" class:urgent={secondsLeft <= 5}>⏱ {secondsLeft}s</span>
 					{/if}
@@ -444,18 +504,26 @@
 					<p class="hint asked-by">🎤 {game.currentRound.askedBy} sordu</p>
 				{/if}
 
-				<div class="note note--tilt-b big-note prompt">
+				<div class="note note--tilt-b big-note prompt" aria-live="polite">
 					<p>{game.currentRound.text}</p>
 				</div>
+				{#if game.currentRound.revealed}
+					<p class="sr-only" aria-live="polite">Sonuçlar açıldı.</p>
+				{/if}
 
 				{#if game.currentRound.type === 'kim_yapar'}
 					{#if !game.currentRound.revealed}
-						<span class="eyebrow">Kim yapar?</span>
-						<ul class="vote-list">
+						<span class="eyebrow" id="vote-label">Kim yapar?</span>
+						<ul class="vote-list" role="group" aria-labelledby="vote-label">
 							{#each game.players as p (p.id)}
 								<li>
-									<button class="vote-btn" class:selected={store.myVote === p.id} onclick={() => vote(p.id)}>
-										<span class="dot" style="background:{p.color}"></span>
+									<button
+										class="vote-btn"
+										class:selected={store.myVote === p.id}
+										aria-pressed={store.myVote === p.id}
+										onclick={() => vote(p.id)}
+									>
+										<span class="dot" style="background:{p.color}" aria-hidden="true"></span>
 										{p.nickname}
 									</button>
 								</li>
@@ -465,7 +533,7 @@
 						<ul class="results">
 							{#each sortedResults as r (r.id)}
 								<li class:top={r.isTop}>
-									<span class="dot" style="background:{r.color}"></span>
+									<span class="dot" style="background:{r.color}" aria-hidden="true"></span>
 									<span class="name">{r.nickname}</span>
 									<span class="votes">{r.votes}</span>
 									{#if r.isTop}<span class="pill iconic">ikonik</span>{/if}
@@ -483,6 +551,7 @@
 							<input
 								class="input"
 								placeholder="İnandırıcı bir sahte cevap yaz…"
+								aria-label="Sahte cevabın"
 								maxlength="80"
 								bind:value={fakeAnswerText}
 								autocomplete="off"
@@ -494,11 +563,16 @@
 					{#if store.isExcluded}
 						<p class="hint">Sen soruyorsun — oy veremezsin, sonucu bekle.</p>
 					{:else}
-						<span class="eyebrow">Hangisi gerçek?</span>
-						<ul class="vote-list">
+						<span class="eyebrow" id="lie-vote-label">Hangisi gerçek?</span>
+						<ul class="vote-list" role="group" aria-labelledby="lie-vote-label">
 							{#each game.currentRound.options as opt (opt.id)}
 								<li>
-									<button class="vote-btn" class:selected={store.myVote === opt.id} onclick={() => vote(opt.id)}>
+									<button
+										class="vote-btn"
+										class:selected={store.myVote === opt.id}
+										aria-pressed={store.myVote === opt.id}
+										onclick={() => vote(opt.id)}
+									>
 										{opt.text}
 									</button>
 								</li>
@@ -537,7 +611,7 @@
 				<ol class="mini-score">
 					{#each game.players as p (p.id)}
 						<li>
-							<span class="dot" style="background:{p.color}"></span>
+							<span class="dot" style="background:{p.color}" aria-hidden="true"></span>
 							<span class="name">{p.nickname}</span>
 							<span class="score"><AnimatedScore value={p.score} /></span>
 						</li>
@@ -571,7 +645,7 @@
 					{#each game.players as p, i (p.id)}
 						<li>
 							<span class="rank">{i + 1}</span>
-							<span class="dot" style="background:{p.color}"></span>
+							<span class="dot" style="background:{p.color}" aria-hidden="true"></span>
 							<span class="name">{p.nickname}</span>
 							<span class="score"><AnimatedScore value={p.score} duration={900} /></span>
 						</li>
@@ -581,6 +655,9 @@
 					{#if isOwner}
 						<button class="btn btn-primary big" onclick={() => gameStore.playAgain()}>Yeniden Oyna</button>
 					{/if}
+					<button class="btn btn-yellow" disabled={sharingCard} onclick={handleShareCard}>
+						{sharingCard ? 'Hazırlanıyor…' : '📤 Sonucu Paylaş'}
+					</button>
 					<button class="btn btn-secondary" onclick={() => { gameStore.leave(); goto('/'); }}>Ana Sayfa</button>
 				</div>
 			</section>
@@ -865,6 +942,31 @@
 		opacity: 0.75;
 		font-weight: 500;
 		line-height: 1.3;
+	}
+
+	.round-options {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+		margin-bottom: 1.25rem;
+	}
+	.round-chip {
+		border: 3px solid var(--ink);
+		background: var(--paper);
+		border-radius: 999px;
+		padding: 0.5rem 1.1rem;
+		font-family: var(--font-display);
+		font-weight: 700;
+		font-size: 0.9rem;
+		box-shadow: 2px 3px 0 var(--ink);
+	}
+	.round-chip:active {
+		transform: translateY(2px);
+		box-shadow: 1px 1px 0 var(--ink);
+	}
+	.round-chip.active {
+		background: var(--yellow);
 	}
 
 	.type-toggle {

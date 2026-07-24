@@ -148,8 +148,8 @@ function makeStore() {
 		submitFakeAnswer(text) {
 			send({ type: 'submit_fake_answer', text });
 		},
-		startCollecting(mode) {
-			send({ type: 'start_collecting', mode });
+		startCollecting(mode, maxRounds) {
+			send({ type: 'start_collecting', mode, maxRounds });
 		},
 		startGame() {
 			send({ type: 'start_game' });

@@ -16,11 +16,14 @@ else, they just hold the authority to advance the game (the "★ host" badge).
    6-letter room code and joins the game as the "host".
 2. Everyone else hits **"Join Room"** and enters the code and their own
    nickname — from their own phone or computer, wherever they are.
-3. **Mode select**: in the lobby, the host picks the game mode before opening
-   the prompt round:
+3. **Mode & length select**: in the lobby, the host picks the game mode
+   before opening the prompt round:
    - **Who Would?** — everyone writes scenarios only
    - **Who's Lying?** — everyone writes trivia questions + real answers only
    - **Mixed** — players choose per submission which type to write
+
+   The host also picks how many rounds to play (5 / 10 / 15 / "All") — handy
+   for telling a quick 10-minute filler game apart from a full session.
 4. **Prompt round**: everyone writes content matching the chosen mode:
    - **Who Would?**: a scenario about your group ("who would do this?" style
      question or memory)
@@ -38,9 +41,11 @@ else, they just hold the authority to advance the game (the "★ host" badge).
 6. After the last round, a **highlights screen** shows a handful of
    superlative awards ("Best Liar", "Most Gullible", "Detective", "Black
    Sheep", "Best Round"...) based on what actually happened in the game,
-   followed by the final scoreboard. If the host hits **"Play Again"**,
+   followed by the final scoreboard. There's a **"Share Result"** button that
+   generates a downloadable/shareable PNG summary card (drawn entirely on
+   `<canvas>`, no server round-trip). If the host hits **"Play Again"**,
    scores and stats reset but the submitted content stays in the pool (the
-   host picks a mode again for the next game).
+   host picks a mode and round count again for the next game).
 
 If not enough content was submitted (fewer than four), the system
 automatically fills the gap with a few ready-made questions/scenarios
@@ -92,12 +97,23 @@ to test from a phone on your local network, use `npm run dev -- --host`.
   default) even if not everyone has responded; non-responders are counted as
   having passed (see `wsServer.js` → `scheduleRoundTimer`). Both durations can
   be shortened via environment variables in a test environment.
+- **Round cap**: the host can also cap the game at 5/10/15 rounds instead of
+  playing through the whole pool (`room.maxRounds`) — the pool is
+  auto-topped-up with defaults if needed so the requested count is always
+  reachable (see `startGame` in `gameLogic.js`).
 - The client keeps a single shared WebSocket connection
   (`src/lib/client/socket.svelte.js`, reactive via Svelte 5 runes); even after
   a page refresh, it automatically resumes where it left off using the room
   code/player id stored in `localStorage`.
 - Two routes: `/` (landing) and `/play/[code]` (the single screen everyone
   plays on — extra control buttons appear there if you're the host).
+- **Operational basics**: `GET /health` (`src/routes/health/+server.js`)
+  returns `{ status, uptime, rooms }` for deploy-platform health checks, and
+  a simple per-connection rate limiter (`wsServer.js`) drops messages beyond
+  ~40/second from a single socket so one buggy or malicious client can't
+  flood a room. Neither is a substitute for real abuse protection (no
+  per-IP/account limits yet) if you're opening this up publicly — see the
+  roadmap below.
 
 ### Why WebSocket + in-memory state instead of serverless?
 
@@ -137,6 +153,21 @@ A few extra touches reinforce that energy:
   come back or the round moves on, so you don't accidentally sit out a round.
 - A **bouncing-dots loader** (`src/lib/components/LoadingDots.svelte`)
   replaces the plain "connecting…" text while the socket connects.
+- **Shareable result card** — a "Share Result" button on the results screen
+  draws a PNG (winner, awards, top scores) on an in-memory `<canvas>` and
+  either opens the native share sheet (`navigator.share`, mostly mobile) or
+  downloads it (`src/lib/client/shareCard.js`). No image assets, no server
+  involvement.
+
+### Accessibility
+
+This hasn't had a full audit, but a first pass is in: real `<button>`
+elements everywhere (keyboard/Enter/Space work out of the box), `aria-label`
+on icon-only controls and unlabeled inputs, `aria-pressed` on toggle-style
+buttons (mode cards, vote buttons), `aria-live` regions announcing new
+rounds and reveals, decorative color dots marked `aria-hidden`, and
+`prefers-reduced-motion` respected for both CSS animation and the confetti
+bursts. Contributions tightening this further are welcome.
 
 ## Tests
 
@@ -152,6 +183,7 @@ node tests/new-features.test.mjs
 node tests/reconnect-mid-game.test.mjs
 node tests/yalanci-kim.test.mjs
 node tests/awards.test.mjs
+node tests/round-cap-and-limits.test.mjs
 ```
 
 - `edge-cases.test.mjs` — too few players, blocking late joins, ownership
@@ -160,6 +192,10 @@ node tests/awards.test.mjs
   connection notifications reaching everyone except the affected player.
 - `new-features.test.mjs` — ownership transfer, kicking a player, a round
   auto-resolving when its timer runs out.
+- `round-cap-and-limits.test.mjs` — a game capped at 5 rounds stops exactly
+  there even with more content available, and a connection sending 60
+  messages in a burst gets throttled (and un-throttled once the window
+  resets).
 - `reconnect-mid-game.test.mjs` — a player reconnecting after the game has
   already started (verifies the server returns a valid state without
   erroring).

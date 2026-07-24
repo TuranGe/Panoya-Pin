@@ -66,8 +66,8 @@
 		</div>
 	{:else if mode === 'create'}
 		<form class="stack actions" onsubmit={handleCreate}>
-			<input class="input" placeholder="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
-			{#if store.error}<p class="error">{store.error}</p>{/if}
+			<input class="input" placeholder="Takma adın" aria-label="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
+			{#if store.error}<p class="error" role="alert">{store.error}</p>{/if}
 			<button class="btn btn-primary big" type="submit" disabled={!nickname.trim() || busy}>
 				{busy ? 'Oda kuruluyor…' : 'Oda Kur'}
 			</button>
@@ -78,14 +78,15 @@
 			<input
 				class="input code-input"
 				placeholder="ODA KODU"
+				aria-label="Oda kodu"
 				maxlength="6"
 				bind:value={code}
 				oninput={() => (code = code.toUpperCase())}
 				autocomplete="off"
 				autocapitalize="characters"
 			/>
-			<input class="input" placeholder="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
-			{#if store.error}<p class="error">{store.error}</p>{/if}
+			<input class="input" placeholder="Takma adın" aria-label="Takma adın" maxlength="20" bind:value={nickname} autocomplete="off" />
+			{#if store.error}<p class="error" role="alert">{store.error}</p>{/if}
 			<button class="btn btn-yellow big" type="submit" disabled={code.trim().length !== 6 || !nickname.trim() || busy}>
 				{busy ? 'Katılıyor…' : 'Katıl'}
 			</button>

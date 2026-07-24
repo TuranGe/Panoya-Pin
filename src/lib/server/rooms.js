@@ -86,6 +86,7 @@ export function createRoom() {
 		ownerGraceTimer: null,
 		phase: 'lobby',
 		selectedMode: null, // 'kim_yapar' | 'yalanci' | 'mixed' — beslemeyi başlatmadan önce owner seçer
+		maxRounds: null, // owner'ın seçtiği tur sınırı (null = havuzdaki her şey oynanır)
 		players: new Map(),
 		pool: [],
 		usedIds: new Set(),

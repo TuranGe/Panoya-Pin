@@ -22,10 +22,13 @@ import {
 	MIN_PLAYERS,
 	MIN_POOL_TO_START,
 	ROUND_DURATION_MS,
-	VALID_MODES
+	VALID_MODES,
+	VALID_ROUND_COUNTS
 } from './gameLogic.js';
 
 const MAX_NICKNAME = 20;
+const RATE_LIMIT_WINDOW_MS = 1000;
+const RATE_LIMIT_MAX_MESSAGES = 40; // bir saniyede bir bağlantıdan gelebilecek en fazla mesaj
 
 function safeSend(ws, payload) {
 	if (ws && ws.readyState === WebSocket.OPEN) {
@@ -35,6 +38,20 @@ function safeSend(ws, payload) {
 
 function sendError(ws, message) {
 	safeSend(ws, { type: 'error', message });
+}
+
+/** Basit sabit-pencereli hız sınırlama: bir bağlantı saniyede RATE_LIMIT_MAX_MESSAGES'tan
+ *  fazla mesaj gönderirse, pencere dolana kadar fazlası sessizce yok sayılır. Tek bir hatalı/
+ *  kötü niyetli istemcinin (ör. saniyede yüzlerce cast_vote göndererek) sunucuyu meşgul etmesini
+ *  ya da diğer oyuncuların deneyimini bozmasını engeller. */
+function isRateLimited(ws) {
+	const now = Date.now();
+	if (!ws._rateWindowStart || now - ws._rateWindowStart > RATE_LIMIT_WINDOW_MS) {
+		ws._rateWindowStart = now;
+		ws._rateCount = 0;
+	}
+	ws._rateCount += 1;
+	return ws._rateCount > RATE_LIMIT_MAX_MESSAGES;
 }
 
 /** Belirtilen ws hariç, odadaki bağlı herkese küçük bir bildirim gönderir (ör. "X bağlantısı koptu"). */
@@ -195,7 +212,7 @@ function handleMessage(ws, msg) {
 			if (!VALID_MODES.includes(msg.mode)) {
 				return sendError(ws, 'Önce bir oyun modu seç.');
 			}
-			beginCollecting(room, msg.mode);
+			beginCollecting(room, msg.mode, msg.maxRounds);
 			broadcastRoom(room);
 			break;
 		}
@@ -283,6 +300,7 @@ export function attachGameServer(httpServer) {
 
 	wss.on('connection', (ws) => {
 		ws.on('message', (raw) => {
+			if (isRateLimited(ws)) return; // sessizce yok say — pencere kısa sürede kendini sıfırlıyor
 			let msg;
 			try {
 				msg = JSON.parse(raw.toString());

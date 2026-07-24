@@ -71,8 +71,11 @@ export function addSubmission(room, authorId, payload) {
 	return { ok: true };
 }
 
-export function beginCollecting(room, mode) {
+export const VALID_ROUND_COUNTS = [5, 10, 15]; // null = havuzdaki her şey (tümü)
+
+export function beginCollecting(room, mode, maxRounds) {
 	room.selectedMode = mode;
+	room.maxRounds = VALID_ROUND_COUNTS.includes(maxRounds) ? maxRounds : null;
 	room.phase = 'collecting';
 }
 
@@ -96,8 +99,11 @@ function defaultFillers(need, mode) {
 }
 
 export function startGame(room) {
-	if (room.pool.length < MIN_POOL_TO_START) {
-		room.pool.push(...defaultFillers(MIN_POOL_TO_START - room.pool.length, room.selectedMode));
+	// Belirli bir tur sayısı seçildiyse, havuz o kadar turu karşılayacak kadar dolu olmalı;
+	// yoksa en az MIN_POOL_TO_START yeterli (fazlası varsa zaten kalan turlarda kullanılır).
+	const targetPoolSize = room.maxRounds ? Math.max(MIN_POOL_TO_START, room.maxRounds) : MIN_POOL_TO_START;
+	if (room.pool.length < targetPoolSize) {
+		room.pool.push(...defaultFillers(targetPoolSize - room.pool.length, room.selectedMode));
 	}
 	room.pool = shuffle(room.pool);
 	room.phase = 'playing';
@@ -107,6 +113,11 @@ export function startGame(room) {
 }
 
 export function startNextRound(room) {
+	if (room.maxRounds && room.roundNumber >= room.maxRounds) {
+		room.phase = 'results';
+		room.currentRound = null;
+		return;
+	}
 	const next = room.pool.find((p) => !room.usedIds.has(p.id));
 	if (!next) {
 		room.phase = 'results';
@@ -292,6 +303,7 @@ function revealYalanciRound(room, round) {
 export function resetForReplay(room) {
 	room.phase = 'lobby';
 	room.selectedMode = null;
+	room.maxRounds = null;
 	room.roundNumber = 0;
 	room.usedIds = new Set();
 	room.currentRound = null;
@@ -303,7 +315,11 @@ export function resetForReplay(room) {
 }
 
 export function roundsRemaining(room) {
-	return room.pool.filter((p) => !room.usedIds.has(p.id)).length;
+	const poolRemaining = room.pool.filter((p) => !room.usedIds.has(p.id)).length;
+	if (room.maxRounds) {
+		return Math.min(poolRemaining, Math.max(0, room.maxRounds - room.roundNumber));
+	}
+	return poolRemaining;
 }
 
 // --- Oyun sonu ödülleri ---
@@ -489,6 +505,7 @@ export function getPublicState(room) {
 		phase: room.phase,
 		ownerId: room.ownerId,
 		selectedMode: room.selectedMode,
+		maxRounds: room.maxRounds,
 		players,
 		poolCount: room.pool.length,
 		submittedCount: room.pool.filter((p) => !p.isDefault).length,
